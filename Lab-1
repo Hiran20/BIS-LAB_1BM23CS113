@@ -1,0 +1,293 @@
+import random
+import numpy as np
+import matplotlib.pyplot as plt
+from typing import List, Tuple, Callable
+
+class GeneticAlgorithm:
+    def __init__(self,
+                 fitness_function: Callable,
+                 bounds: List[Tuple[float, float]],
+                 population_size: int = 100,
+                 mutation_rate: float = 0.01,
+                 crossover_rate: float = 0.8,
+                 generations: int = 100,
+                 elitism: bool = True):
+        """
+        Initialize the Genetic Algorithm
+        Args:
+            fitness_function: Function to maximize
+            bounds: List of (min, max) bounds for each variable
+            population_size: Size of the population
+            mutation_rate: Probability of mutation
+            crossover_rate: Probability of crossover
+            generations: Number of generations to run
+            elitism: Whether to keep best individual in next generation
+        """
+        self.fitness_function = fitness_function
+        self.bounds = bounds
+        self.population_size = population_size
+        self.mutation_rate = mutation_rate
+        self.crossover_rate = crossover_rate
+        self.generations = generations
+        self.elitism = elitism
+        self.num_variables = len(bounds)
+
+        # Track evolution progress
+        self.best_fitness_history = []
+        self.average_fitness_history = []
+        self.best_individual = None
+        self.best_fitness = float('-inf')
+
+    def create_initial_population(self) -> List[List[float]]:
+        """Create initial population with random individuals"""
+        population = []
+        for _ in range(self.population_size):
+            individual = []
+            for min_val, max_val in self.bounds:
+                individual.append(random.uniform(min_val, max_val))
+            population.append(individual)
+        return population
+
+    def evaluate_fitness(self, population: List[List[float]]) -> List[float]:
+        """Evaluate fitness for each individual in the population"""
+        fitness_scores = []
+        for individual in population:
+            fitness = self.fitness_function(individual)
+            fitness_scores.append(fitness)
+        return fitness_scores
+
+    def tournament_selection(self,
+                             population: List[List[float]],
+                             fitness_scores: List[float],
+                             tournament_size: int = 3) -> List[float]:
+        """Select an individual using tournament selection"""
+        tournament_indices = random.sample(range(len(population)), tournament_size)
+        tournament_fitness = [fitness_scores[i] for i in tournament_indices]
+        winner_index = tournament_indices[tournament_fitness.index(max(tournament_fitness))]
+        return population[winner_index].copy()
+
+    def uniform_crossover(self,
+                          parent1: List[float],
+                          parent2: List[float]) -> Tuple[List[float], List[float]]:
+        """Perform uniform crossover between two parents"""
+        if random.random() > self.crossover_rate:
+            return parent1.copy(), parent2.copy()
+        child1, child2 = [], []
+        for i in range(len(parent1)):
+            if random.random() < 0.5:
+                child1.append(parent1[i])
+                child2.append(parent2[i])
+            else:
+                child1.append(parent2[i])
+                child2.append(parent1[i])
+        return child1, child2
+
+    def gaussian_mutation(self, individual: List[float]) -> List[float]:
+        """Apply Gaussian mutation to an individual"""
+        mutated = individual.copy()
+        for i in range(len(mutated)):
+            if random.random() < self.mutation_rate:
+                # Add Gaussian noise
+                noise = random.gauss(0, 0.1 * (self.bounds[i][1] - self.bounds[i][0]))
+                mutated[i] += noise
+                # Ensure bounds are respected
+                mutated[i] = max(self.bounds[i][0], min(self.bounds[i][1], mutated[i]))
+        return mutated
+
+    def evolve(self) -> Tuple[List[float], float]:
+        """Run the genetic algorithm evolution process"""
+        # Initialize population
+        population = self.create_initial_population()
+
+        for generation in range(self.generations):
+            # Evaluate fitness
+            fitness_scores = self.evaluate_fitness(population)
+
+            # Track best individual
+            max_fitness_idx = fitness_scores.index(max(fitness_scores))
+            if fitness_scores[max_fitness_idx] > self.best_fitness:
+                self.best_fitness = fitness_scores[max_fitness_idx]
+                self.best_individual = population[max_fitness_idx].copy()
+
+            # Track statistics
+            self.best_fitness_history.append(max(fitness_scores))
+            self.average_fitness_history.append(sum(fitness_scores) / len(fitness_scores))
+
+            # Create new population
+            new_population = []
+
+            # Elitism: keep best individual
+            if self.elitism:
+                new_population.append(population[max_fitness_idx].copy())
+
+            # Generate offspring
+            while len(new_population) < self.population_size:
+                # Selection
+                parent1 = self.tournament_selection(population, fitness_scores)
+                parent2 = self.tournament_selection(population, fitness_scores)
+
+                # Crossover
+                child1, child2 = self.uniform_crossover(parent1, parent2)
+
+                # Mutation
+                child1 = self.gaussian_mutation(child1)
+                child2 = self.gaussian_mutation(child2)
+
+                new_population.extend([child1, child2])
+
+            # Ensure population size is correct
+            population = new_population[:self.population_size]
+
+            # Print progress
+            if generation % 10 == 0:
+                print(
+                    f"Generation {generation}: Best Fitness = {max(fitness_scores):.6f}, "
+                    f"Average Fitness = {sum(fitness_scores)/len(fitness_scores):.6f}"
+                )
+
+        return self.best_individual, self.best_fitness
+
+    def plot_evolution(self):
+        """Plot the evolution progress"""
+        plt.figure(figsize=(12, 4))
+        plt.subplot(1, 2, 1)
+        plt.plot(self.best_fitness_history, label='Best Fitness', linewidth=2)
+        plt.plot(self.average_fitness_history, label='Average Fitness', linewidth=2)
+        plt.xlabel('Generation')
+        plt.ylabel('Fitness')
+        plt.title('Evolution Progress')
+        plt.legend()
+        plt.grid(True)
+
+        plt.subplot(1, 2, 2)
+        plt.plot(self.best_fitness_history, 'r-', linewidth=2)
+        plt.xlabel('Generation')
+        plt.ylabel('Best Fitness')
+        plt.title('Best Fitness Over Time')
+        plt.grid(True)
+        plt.tight_layout()
+        plt.show()
+
+# Example optimization problems
+
+def rastrigin_function(x):
+    """
+    Rastrigin function - multimodal optimization problem
+    Global minimum: f(0,0,...,0) = 0
+    We negate it to turn it into a maximization problem
+    """
+    A = 10
+    n = len(x)
+    return -(A * n + sum(xi**2 - A * np.cos(2 * np.pi * xi) for xi in x))
+
+def sphere_function(x):
+    """
+    Sphere function - simple unimodal optimization problem
+    Global minimum: f(0,0,...,0) = 0
+    We negate it to turn it into a maximization problem
+    """
+    return -sum(xi**2 for xi in x)
+
+def rosenbrock_function(x):
+    """
+    Rosenbrock function - classic optimization benchmark
+    Global minimum: f(1,1,...,1) = 0
+    We negate it to turn it into a maximization problem
+    """
+    result = 0
+    for i in range(len(x) - 1):
+        result += 100 * (x[i + 1] - x[i]**2)**2 + (1 - x[i])**2
+    return -result
+
+def custom_function(x):
+    """
+    Custom function: f(x,y) = -(x^2 + y^2) + 10*cos(x)*cos(y)
+    Multiple local maxima
+    """
+    if len(x) != 2:
+        raise ValueError("This function requires exactly 2 variables")
+    return -(x[0]**2 + x[1]**2) + 10 * np.cos(x[0]) * np.cos(x[1])
+
+# Example usage
+
+if __name__ == "__main__":
+    print("=== Genetic Algorithm Optimization Examples ===\n")
+
+    # Example 1: 2D Rastrigin function
+    print("1. Optimizing 2D Rastrigin Function")
+    print("-" * 40)
+    ga1 = GeneticAlgorithm(fitness_function=rastrigin_function,
+                           bounds=[(-5.12, 5.12), (-5.12, 5.12)],
+                           population_size=100,
+                           mutation_rate=0.02,
+                           crossover_rate=0.8,
+                           generations=50,
+                           elitism=True)
+    best_solution1, best_fitness1 = ga1.evolve()
+    print(f"\nBest Solution: {best_solution1}")
+    print(f"Best Fitness: {best_fitness1:.6f}")
+    print(f"Expected optimum: [0, 0] with fitness = 0")
+
+    # Example 2: Custom function with multiple local maxima
+    print("\n2. Optimizing Custom Function")
+    print("-" * 40)
+    ga2 = GeneticAlgorithm(fitness_function=custom_function,
+                           bounds=[(-10, 10), (-10, 10)],
+                           population_size=80,
+                           mutation_rate=0.01,
+                           crossover_rate=0.9,
+                           generations=50,
+                           elitism=True)
+    best_solution2, best_fitness2 = ga2.evolve()
+    print(f"\nBest Solution: {best_solution2}")
+    print(f"Best Fitness: {best_fitness2:.6f}")
+
+    # Example 3: Higher dimensional Rosenbrock function
+    print("\n3. Optimizing 5D Rosenbrock Function")
+    print("-" * 40)
+    ga3 = GeneticAlgorithm(
+        fitness_function=rosenbrock_function,
+        bounds=[(-2, 2)] * 5,  # 5 dimensions
+        population_size=150,
+        mutation_rate=0.015,
+        crossover_rate=0.85,
+        generations=100,
+        elitism=True)
+    best_solution3, best_fitness3 = ga3.evolve()
+    print(f"\nBest Solution: {best_solution3}")
+    print(f"Best Fitness: {best_fitness3:.6f}")
+    print(f"Expected optimum: [1, 1, 1, 1, 1] with fitness = 0")
+
+    # Plot evolution for the last example
+    print("\n=== Evolution Visualization ===")
+    ga3.plot_evolution()
+
+    # Compare different GA configurations
+    print("\n4. Parameter Sensitivity Analysis")
+    print("-" * 40)
+    configurations = [
+        {
+            "mutation_rate": 0.001,
+            "crossover_rate": 0.9,
+            "population_size": 50
+        },
+        {
+            "mutation_rate": 0.01,
+            "crossover_rate": 0.8,
+            "population_size": 100
+        },
+        {
+            "mutation_rate": 0.05,
+            "crossover_rate": 0.7,
+            "population_size": 150
+        },
+    ]
+
+    for i, config in enumerate(configurations):
+        print(f"Configuration {i+1}: {config}")
+        ga_test = GeneticAlgorithm(fitness_function=sphere_function,
+                                   bounds=[(-10, 10), (-10, 10)],
+                                   generations=30,
+                                   **config)
+        best_sol, best_fit = ga_test.evolve()
+        print(f"Final best fitness: {best_fit:.6f}\n")
