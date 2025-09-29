@@ -1,0 +1,87 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+
+def GWO(obj_func, dim, search_space, n_wolves=20, max_iter=100):
+    
+    lb, ub = search_space
+    lb = np.array([lb] * dim)
+    ub = np.array([ub] * dim)
+
+    
+    wolves = np.random.uniform(lb, ub, (n_wolves, dim))
+
+   
+    alpha, beta, delta = np.zeros(dim), np.zeros(dim), np.zeros(dim)
+    alpha_score, beta_score, delta_score = float("inf"), float("inf"), float("inf")
+
+    
+    convergence_curve = []
+
+    
+    for t in range(max_iter):
+        for i in range(n_wolves):
+            
+            wolves[i] = np.clip(wolves[i], lb, ub)
+
+            
+            fitness = obj_func(wolves[i])
+
+            
+            if fitness < alpha_score:
+                delta_score, delta = beta_score, beta.copy()
+                beta_score, beta = alpha_score, alpha.copy()
+                alpha_score, alpha = fitness, wolves[i].copy()
+            elif fitness < beta_score:
+                delta_score, delta = beta_score, beta.copy()
+                beta_score, beta = fitness, wolves[i].copy()
+            elif fitness < delta_score:
+                delta_score, delta = fitness, wolves[i].copy()
+
+        
+        a = 2 - t * (2 / max_iter)
+
+        
+        for i in range(n_wolves):
+            X1, X2, X3 = None, None, None
+
+            for j, leader_pos in enumerate([alpha, beta, delta]):
+                r1, r2 = np.random.rand(dim), np.random.rand(dim)
+                A = 2 * a * r1 - a
+                C = 2 * r2
+
+                D = abs(C * leader_pos - wolves[i])
+                X = leader_pos - A * D
+
+                if j == 0:
+                    X1 = X
+                elif j == 1:
+                    X2 = X
+                else:
+                    X3 = X
+
+            wolves[i] = (X1 + X2 + X3) / 3
+
+       
+        convergence_curve.append(alpha_score)
+
+    return alpha, alpha_score, convergence_curve
+
+
+
+def sphere(x):
+    return np.sum(x**2)
+
+
+
+best_position, best_score, curve = GWO(sphere, dim=5, search_space=(-10, 10), n_wolves=30, max_iter=200)
+
+print("Best Position:", best_position)
+print("Best Score:", best_score)
+
+
+plt.plot(curve)
+plt.title("GWO Convergence Curve")
+plt.xlabel("Iteration")
+plt.ylabel("Best Score")
+plt.show()
