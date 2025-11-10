@@ -1,0 +1,74 @@
+import numpy as np
+from multiprocessing import Pool, cpu_count
+
+# --- Rule Function ---
+def resource_allocation_rule(args):
+    """
+    Cellular rule based on handwritten pseudocode:
+    - 1 → 2
+    - 2 → 0
+    - 0 → 1 if any neighbour == 1, else 0
+    """
+    grid, x, y = args
+    rows, cols = grid.shape
+    current_state = grid[x, y]
+
+    # Get 8-neighbourhood
+    neighbours = []
+    for dx in [-1, 0, 1]:
+        for dy in [-1, 0, 1]:
+            if dx == 0 and dy == 0:
+                continue
+            nx, ny = x + dx, y + dy
+            if 0 <= nx < rows and 0 <= ny < cols:
+                neighbours.append(grid[nx, ny])
+
+    # Apply rule
+    if current_state == 1:
+        return 2
+    elif current_state == 2:
+        return 0
+    elif current_state == 0:
+        if 1 in neighbours:
+            return 1
+        else:
+            return 0
+
+# --- Single Iteration (Parallel) ---
+def update_grid_parallel(grid):
+    rows, cols = grid.shape
+    args = [(grid, x, y) for x in range(rows) for y in range(cols)]
+
+    with Pool(cpu_count()) as pool:
+        result = pool.map(resource_allocation_rule, args)
+
+    return np.array(result, dtype=int).reshape((rows, cols))
+
+# --- Main Simulation Function ---
+def run_resource_allocation(grid, steps=5):
+    """
+    Run the resource allocation automaton for given steps.
+    """
+    for step in range(steps):
+        grid = update_grid_parallel(grid)
+        print(f"Step {step + 1}:")
+        print(grid, "\n")
+    return grid
+
+# --- Example Usage ---
+if __name__ == "__main__":
+    # Example initial grid (from your notes)
+    initial_grid = np.array([
+        [0, 2, 0, 0],
+        [0, 1, 0, 0],
+        [0, 0, 0, 0],
+        [0, 2, 0, 1]
+    ], dtype=int)
+
+    print("Initial Grid:")
+    print(initial_grid, "\n")
+
+    final_grid = run_resource_allocation(initial_grid, steps=5)
+
+    print("Final Grid:")
+    print(final_grid)
